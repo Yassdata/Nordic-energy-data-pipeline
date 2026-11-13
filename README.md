@@ -96,3 +96,29 @@ I also plan to use SQL, DuckDB, and dbt to explore electricity price patterns, c
 ## Data Source
 
 [Energi Data Service — DayAheadPrices](https://www.energidataservice.dk/)
+
+## AWS Cloud Storage
+
+The project uses Amazon S3 to store electricity price data in the cloud.
+
+I connected Python to AWS using Boto3 and configured authentication using temporary AWS credentials.
+
+Both the original JSON data and processed Parquet dataset are uploaded to S3, keeping the raw data available for future reprocessing.
+
+The S3 objects are organized using date-based prefixes:
+
+```text
+s3://nordic-energy-data-pipeline-yh2026/
+├── raw/
+│   └── dayaheadprices/
+│       └── ingestion_date=YYYY-MM-DD/
+│           └── prices.json
+└── processed/
+    └── dayaheadprices/
+        └── ingestion_date=YYYY-MM-DD/
+            └── day_ahead_prices.parquet
+```
+
+The `aws_s3_integration.ipynb` notebook handles the connection, uploads, and verification of files stored in S3.
+
+The next step is to automate the extraction and S3 uploads using AWS Lambda and EventBridge Scheduler.
