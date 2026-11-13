@@ -1,53 +1,51 @@
 # Nordic Energy Data Pipeline
 
-A data engineering project focused on collecting and processing Danish electricity market data using Python and SQL.
+A data engineering project focused on collecting, validating, and processing Danish electricity market data using Python and AWS.
 
-The project uses [Energi Data Service](https://www.energidataservice.dk/) to retrieve day-ahead electricity prices for the DK1 and DK2 price areas. The goal is to build a pipeline that takes data from an API, validates its quality, and prepares it for storage and analysis.
+The project uses the [Energi Data Service](https://www.energidataservice.dk/) API to retrieve day-ahead electricity prices for Denmark's DK1 and DK2 price areas. The goal is to build an automated pipeline that stores and transforms the data for further analysis.
 
 ## Tech Stack
 
-**Currently used:** Python, Pandas, Requests, JSON, Parquet, Git, GitHub
+**Currently used:** Python, Pandas, Requests, Boto3, AWS S3, JSON, Parquet, Git, GitHub
 
-**Planned:** Databricks, Delta Lake, SQL, DuckDB, dbt
+**Planned:** AWS Lambda, EventBridge Scheduler, CloudWatch, Databricks, PySpark, Delta Lake, SQL, dbt, DuckDB, Streamlit
 
 ## Pipeline Overview
 
-The pipeline currently covers two main stages:
+### 1. Data Extraction & Validation
 
-**1. Data Extraction**
+`api_data_extraction.ipynb`
 
-The `api_data_extraction.ipynb` notebook retrieves electricity prices from the Energi Data Service API and saves the raw response as JSON.
+Retrieves electricity prices from the Energi Data Service API and saves the raw response as JSON.
 
-It also includes data quality checks for:
+The following data quality checks are included:
 
-- Missing values
-- Duplicate records using a composite key (`TimeUTC`, `PriceArea`)
-- Invalid price areas
-- Incorrect price data types
-- Invalid timestamps
+- Missing values and duplicate records
+- Valid price areas (DK1 and DK2)
+- Price data types and timestamp validation
 - Missing 15-minute intervals
 
-**2. Data Preparation**
+### 2. Data Preparation
 
-The `data_preparation.ipynb` notebook reads the JSON data and prepares it for further processing.
+`data_preparation.ipynb`
 
-This includes converting the records into a Pandas DataFrame, converting timestamps to datetime, creating a delivery date column, and exporting the dataset to Parquet.
+Converts JSON records into a Pandas DataFrame, prepares the timestamp columns, adds a delivery date, and exports the data to Parquet.
 
-## Dataset
+### 3. AWS Cloud Storage
 
-The initial dataset covers 1–7 November 2026 and contains 1,344 records for the two Danish electricity price areas.
+`aws_s3_integration.ipynb`
 
-The main fields are:
+Uses Boto3 to upload raw JSON and processed Parquet files to Amazon S3, with separate storage paths and upload verification.
 
-| Column | Description |
-|---|---|
-| TimeUTC | Delivery timestamp in UTC |
-| TimeDK | Delivery timestamp in Danish local time |
-| PriceArea | Danish electricity price area (DK1 or DK2) |
-| DayAheadPriceEUR | Day-ahead electricity price in EUR/MWh |
-| DayAheadPriceDKK | Day-ahead electricity price in DKK/MWh |
+```text
+s3://nordic-energy-data-pipeline-yh2026/
+├── raw/dayaheadprices/
+│   └── ingestion_date=YYYY-MM-DD/prices.json
+└── processed/dayaheadprices/
+    └── ingestion_date=YYYY-MM-DD/day_ahead_prices.parquet
+```
 
-All implemented data quality checks passed on the initial dataset.
+The initial dataset contains **1,344 records** covering 1–7 November 2026 for DK1 and DK2. All implemented data quality checks passed on this dataset.
 
 ## Project Structure
 
@@ -55,21 +53,21 @@ All implemented data quality checks passed on the initial dataset.
 Nordic Energy Data Pipeline/
 ├── scripts/
 │   ├── api_data_extraction.ipynb
-│   └── data_preparation.ipynb
+│   ├── data_preparation.ipynb
+│   ├── aws_s3_integration.ipynb
+│   └── energy_pipeline.py
 ├── json_data_file/
-│   └── prices.json
 ├── data/
 │   └── processed/
-│       └── day_ahead_prices.parquet
 ├── requirements.txt
 └── README.md
 ```
 
-The JSON and Parquet datasets are generated locally and excluded from Git.
+Raw and processed datasets are generated locally and excluded from Git. The `energy_pipeline.py` script is being developed for automated execution.
 
 ## Getting Started
 
-Clone the repository and install the Python dependencies:
+Clone the repository and install the dependencies:
 
 ```bash
 git clone https://github.com/Yassdata/Nordic-energy-data-pipeline.git
@@ -80,45 +78,21 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
 
-Open the project in VS Code and select the project's Python environment as the Jupyter kernel.
+Open the notebooks in VS Code using the project's Python environment.
 
-Run the notebooks in this order:
+Run them in this order:
 
-1. `api_data_extraction.ipynb` — Extract and validate the electricity price data.
-2. `data_preparation.ipynb` — Prepare the data and export it to Parquet.
+1. `api_data_extraction.ipynb` — Extract and validate electricity prices.
+2. `data_preparation.ipynb` — Prepare the data and export to Parquet.
+3. `aws_s3_integration.ipynb` — Upload and verify files in S3 (requires configured AWS access).
 
 ## Next Steps
 
-The next stage is to extend the local pipeline with Databricks and Delta Lake for structured data storage and transformations.
-
-I also plan to use SQL, DuckDB, and dbt to explore electricity price patterns, compare DK1 and DK2, and build a simple analytical layer.
+- Automate daily extraction and S3 uploads using **AWS Lambda and EventBridge Scheduler**.
+- Build **Bronze, Silver, and Gold** data layers using Databricks, PySpark, and Delta Lake.
+- Use SQL, dbt, and DuckDB for transformations and electricity price analysis.
+- Develop a Streamlit dashboard to compare DK1 and DK2 prices, explore historical trends, and identify lower-price periods.
 
 ## Data Source
 
 [Energi Data Service — DayAheadPrices](https://www.energidataservice.dk/)
-
-## AWS Cloud Storage
-
-The project uses Amazon S3 to store electricity price data in the cloud.
-
-I connected Python to AWS using Boto3 and configured authentication using temporary AWS credentials.
-
-Both the original JSON data and processed Parquet dataset are uploaded to S3, keeping the raw data available for future reprocessing.
-
-The S3 objects are organized using date-based prefixes:
-
-```text
-s3://nordic-energy-data-pipeline-yh2026/
-├── raw/
-│   └── dayaheadprices/
-│       └── ingestion_date=YYYY-MM-DD/
-│           └── prices.json
-└── processed/
-    └── dayaheadprices/
-        └── ingestion_date=YYYY-MM-DD/
-            └── day_ahead_prices.parquet
-```
-
-The `aws_s3_integration.ipynb` notebook handles the connection, uploads, and verification of files stored in S3.
-
-The next step is to automate the extraction and S3 uploads using AWS Lambda and EventBridge Scheduler.
