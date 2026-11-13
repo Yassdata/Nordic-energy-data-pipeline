@@ -1,0 +1,5 @@
+# Verified direct dependencies for Python 3.12
+requests==2.34.2
+pandas==3.1.1
+pyarrow==26.0.1
+ipykernel==7.4.0

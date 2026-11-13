@@ -1,0 +1,38 @@
+# Python environments and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Notebook checkpoints (keep the notebooks themselves)
+.ipynb_checkpoints/
+
+# Local credentials
+.env
+.env.*
+!.env.example
+
+# Downloaded snapshots and generated datasets (keep files locally)
+json_data_file/*.json
+data/raw/
+data/interim/
+data/processed/
+
+# Temporary files, logs, and macOS metadata
+.DS_Store
+._*
+*.log
+*.tmp
+*.swp
+*~
+tmp/
+temp/
