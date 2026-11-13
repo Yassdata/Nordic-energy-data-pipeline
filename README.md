@@ -1,139 +1,98 @@
 # Nordic Energy Data Pipeline
 
-A learning project for extracting Danish day-ahead electricity prices for DK1
-and DK2 from Energi Data Service, checking data quality, and preparing data for
-analysis.
+A data engineering project focused on collecting and processing Danish electricity market data using Python and SQL.
 
-## Project layout
+The project uses [Energi Data Service](https://www.energidataservice.dk/) to retrieve day-ahead electricity prices for the DK1 and DK2 price areas. The goal is to build a pipeline that takes data from an API, validates its quality, and prepares it for storage and analysis.
+
+## Tech Stack
+
+**Currently used:** Python, Pandas, Requests, JSON, Parquet, Git, GitHub
+
+**Planned:** Databricks, Delta Lake, SQL, DuckDB, dbt
+
+## Pipeline Overview
+
+The pipeline currently covers two main stages:
+
+**1. Data Extraction**
+
+The `api_data_extraction.ipynb` notebook retrieves electricity prices from the Energi Data Service API and saves the raw response as JSON.
+
+It also includes data quality checks for:
+
+- Missing values
+- Duplicate records using a composite key (`TimeUTC`, `PriceArea`)
+- Invalid price areas
+- Incorrect price data types
+- Invalid timestamps
+- Missing 15-minute intervals
+
+**2. Data Preparation**
+
+The `data_preparation.ipynb` notebook reads the JSON data and prepares it for further processing.
+
+This includes converting the records into a Pandas DataFrame, converting timestamps to datetime, creating a delivery date column, and exporting the dataset to Parquet.
+
+## Dataset
+
+The initial dataset covers 1–7 November 2026 and contains 1,344 records for the two Danish electricity price areas.
+
+The main fields are:
+
+| Column | Description |
+|---|---|
+| TimeUTC | Delivery timestamp in UTC |
+| TimeDK | Delivery timestamp in Danish local time |
+| PriceArea | Danish electricity price area (DK1 or DK2) |
+| DayAheadPriceEUR | Day-ahead electricity price in EUR/MWh |
+| DayAheadPriceDKK | Day-ahead electricity price in DKK/MWh |
+
+All implemented data quality checks passed on the initial dataset.
+
+## Project Structure
 
 ```text
-scripts/
-  api_data_extraction.ipynb     # API extraction and data quality checks
-  data_preparation.ipynb        # Prepare timestamps and write Parquet safely
-json_data_file/
-  prices.json                   # Existing source snapshot, kept locally
-data/processed/
-  day_ahead_prices.parquet       # Existing processed dataset, kept locally
-.vscode/                        # Settings for this project only
-requirements.txt                # Direct Python dependencies
+Nordic Energy Data Pipeline/
+├── scripts/
+│   ├── api_data_extraction.ipynb
+│   └── data_preparation.ipynb
+├── json_data_file/
+│   └── prices.json
+├── data/
+│   └── processed/
+│       └── day_ahead_prices.parquet
+├── requirements.txt
+└── README.md
 ```
 
-Existing files retain their original names and locations. Downloaded JSON and
-generated data are ignored by Git; ignoring them does not delete them. A fresh
-clone will not include these local datasets.
+The JSON and Parquet datasets are generated locally and excluded from Git.
 
-## Python setup
+## Getting Started
 
-This project uses Python 3.12.3 in `.venv`. Global Python installations and shell
-configuration are unchanged. An interrupted installation caused by low disk
-space was repaired after space was freed.
+Clone the repository and install the Python dependencies:
 
-For a new checkout, create and activate an environment, then install dependencies:
+```bash
+git clone https://github.com/Yassdata/Nordic-energy-data-pipeline.git
+cd Nordic-energy-data-pipeline
 
-```zsh
-cd "/Users/yassinehouari/Desktop/Nordic Energy Data Pipeline"
-# Only create the environment if .venv does not already exist:
-/Library/Frameworks/Python.framework/Versions/3.12/bin/python3 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python -m pip check
-python -m ipykernel install --sys-prefix --name nordic-energy --display-name "Nordic Energy (.venv)"
 ```
 
-The absolute Python path above is specific to this Mac. On another computer,
-use the path to an installed Python 3.12 interpreter instead.
+Open the project in VS Code and select the project's Python environment as the Jupyter kernel.
 
-Dependencies are limited to `requests` for API access, `pandas` for tabular data,
-`pyarrow` for Parquet, and `ipykernel` for notebook execution. Direct versions
-are pinned to the verified installation; transitive dependencies are resolved
-by pip. No Jupyter server or JupyterLab installation is needed for VS Code.
-Both notebooks' imports are covered by these four direct dependencies.
+Run the notebooks in this order:
 
-## VS Code and notebooks
+1. `api_data_extraction.ipynb` — Extract and validate the electricity price data.
+2. `data_preparation.ipynb` — Prepare the data and export it to Parquet.
 
-Open this project folder itself with File → Open Folder. Workspace settings make
-new terminals start here using zsh and set `.venv/bin/python` as the default
-Python interpreter. Existing terminal sessions are not changed.
+## Next Steps
 
-Use Command Palette → Python: Select Interpreter
-and select `.venv/bin/python` if a different interpreter was previously saved.
-In each notebook, use Select Kernel → Python Environments → the project's
-`.venv`. Check the kernel by running:
+The next stage is to extend the local pipeline with Databricks and Delta Lake for structured data storage and transformations.
 
-```python
-import sys
-print(sys.executable)
-```
+I also plan to use SQL, DuckDB, and dbt to explore electricity price patterns, compare DK1 and DK2, and build a simple analytical layer.
 
-The path should end in `Nordic Energy Data Pipeline/.venv/bin/python`.
-VS Code's notebook working directory is configured to the project root, so
-existing relative paths such as `json_data_file/prices.json` resolve from here.
+## Data Source
 
-Both notebooks now resolve their paths from either the project root
-or `scripts/`. The extraction notebook loads the existing JSON snapshot by default. If the snapshot
-is missing, it calls the API and creates the JSON with exclusive creation mode,
-which prevents replacing an existing file. To fetch another period deliberately,
-call `get_day_ahead_prices(start_date, end_date)` and save the returned data under
-a new filename.
-
-The preparation notebook prepares the data in memory on every run and writes
-the Parquet only if it does not already exist. Use a new output filename to
-keep a fresh export alongside the existing dataset.
-
-## Verification on 13 November 2026
-
-- All dependencies imported successfully and `python -m pip check` passed.
-- The project-local `Nordic Energy (.venv)` kernel was installed and successfully
-  used for the extraction checks. A later live-kernel startup attempt timed out
-  after 60 seconds while macOS continued offloading environment files.
-  Reliable startup still requires keeping the folder downloaded locally.
-- All 14 extraction notebook cells ran in that kernel from both the root and
-  `scripts/`, using the saved snapshot with network requests blocked.
-- All existing quality checks passed for 1,344 JSON records.
-- The processed Parquet loaded successfully: 1,344 rows and 6 columns.
-- JSON and Parquet SHA-256 hashes matched the originals after verification.
-- All 4 preparation notebook code cells ran with `.venv` from both folders.
-  The resulting DataFrame matched the original Parquet (ignoring dtype precision).
-  The existing processed file was preserved.
-
-Both original notebooks were backed up before editing under
-`/tmp/nordic-energy-setup-originals/scripts/`.
-That is a temporary backup, not a permanent version history.
-
-macOS repeatedly marked files here, including environment files, as `dataless`.
-Use Finder's Keep Downloaded option if available to keep the entire project local
-while developing. Offloaded files can make Python imports and kernel startup slow.
-Only offloaded, regenerable `.venv` bytecode caches were cleared during diagnosis;
-no project source or datasets were deleted.
-
-## Terminal basics
-
-```zsh
-pwd                         # Show the current directory
-ls -la                      # List files, including hidden files
-source .venv/bin/activate   # Use this project's Python in this terminal
-python --version            # Check the active Python version
-python -m pip --version     # Check pip for that same Python
-python -m pip check         # Check installed dependency compatibility
-deactivate                  # Leave the virtual environment
-```
-
-Use `python -m pip` after activation so installation uses the same interpreter
-as your code. This Mac's global `python3` and `pip` currently resolve to different
-Python installations. No global shell settings were changed.
-
-## Learning Git manually
-
-A local repository has been initialized. There are no commits or remotes, and
-Git name and email were not changed. These commands only inspect your work:
-
-```zsh
-git status                  # Show untracked and modified files
-git diff                    # Show edits to already tracked files
-git diff --staged            # Show changes staged for the next commit
-git check-ignore -v json_data_file/prices.json
-```
-
-`git diff` does not show the contents of untracked files. When you are ready,
-practice `git add <file>` to stage a chosen file and `git commit` to record staged
-changes yourself. No staging, commits, or GitHub operations were automated.
+[Energi Data Service — DayAheadPrices](https://www.energidataservice.dk/)
