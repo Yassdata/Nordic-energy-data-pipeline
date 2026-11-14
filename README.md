@@ -63,7 +63,7 @@ Nordic Energy Data Pipeline/
 └── README.md
 ```
 
-Raw and processed datasets are generated locally and excluded from Git. The `energy_pipeline.py` script is being developed for automated execution.
+Raw and processed datasets are generated locally and excluded from Git. The `energy_pipeline.py` script runs the daily job independently of the notebooks.
 
 ## Getting Started
 
@@ -85,6 +85,52 @@ Run them in this order:
 1. `api_data_extraction.ipynb` — Extract and validate electricity prices.
 2. `data_preparation.ipynb` — Prepare the data and export to Parquet.
 3. `aws_s3_integration.ipynb` — Upload and verify files in S3 (requires configured AWS access).
+
+## Daily ingestion script
+
+The script requests tomorrow's prices using Copenhagen calendar dates. It
+validates a full day for DK1 and DK2 before creating either output. Each area
+must have 96 quarter-hours on a normal day, 92 when clocks move forward, or
+100 when they move back.
+
+Run the tests from the repo root with the project's Python environment active:
+
+```bash
+python -B -m unittest discover -s tests -v
+```
+
+To check tomorrow's live response and write only to a new temporary directory:
+
+```bash
+scratch="$(mktemp -d)"
+python -B scripts/energy_pipeline.py --local-output "$scratch/output"
+```
+
+Run after tomorrow's prices are published. For an offline check, add
+`--input-json /path/to/single-day-response.json --delivery-date YYYY-MM-DD`.
+The input must contain exactly one complete delivery day, including both zones.
+Local mode does not create an AWS client and refuses to reuse an output directory.
+
+An intentional AWS run requires `--upload` and `ENERGY_S3_BUCKET`. Boto3 uses
+its normal credential chain; set `AWS_PROFILE` locally if you want to select a
+configured profile. For Lambda, configure
+`scripts.energy_pipeline.lambda_handler` when packaging from the repo root,
+include the dependencies for the Lambda runtime and architecture, set
+`ENERGY_S3_BUCKET`, and use the execution role. Do not put AWS keys in source
+or Lambda environment variables.
+
+Daily S3 keys are separate from the notebooks' historical `ingestion_date` keys:
+
+```text
+raw/dayaheadprices/delivery_date=YYYY-MM-DD/prices.json
+processed/dayaheadprices/delivery_date=YYYY-MM-DD/day_ahead_prices.parquet
+```
+
+The role needs `s3:PutObject` on both prefixes and `s3:GetObject` to check
+existing objects. S3 refuses overwrites. If a run stops after uploading raw JSON,
+a retry with matching content can finish the Parquet upload; a content mismatch
+fails and leaves the existing object in place. The two uploads are separate
+operations.
 
 ## Next Steps
 
