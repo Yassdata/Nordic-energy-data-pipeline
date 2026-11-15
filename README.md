@@ -1,144 +1,124 @@
-# Nordic Energy Data Pipeline
+# ⚡ End-to-End Danish Electricity Price Analytics | Real Energinet Data 🇩🇰
 
-A data engineering project focused on collecting, validating, and processing Danish electricity market data using Python and AWS.
+Ever wondered why electricity prices change throughout the day, or why they can be different across Denmark? In this project, I'm exploring **real day-ahead electricity prices from [Energinet's Energi Data Service API](https://www.energidataservice.dk/)**, covering Denmark's two electricity price areas, **DK1 (Western Denmark) and DK2 (Eastern Denmark)**. Using Python, AWS, and data engineering tools, I'm building an automated system that collects, validates, and prepares this data for analysis. The goal is to uncover price patterns, compare electricity prices across regions, and identify the cheapest hours to use electricity, turning real market data into practical insights that anyone can understand.
 
-The project uses the [Energi Data Service](https://www.energidataservice.dk/) API to retrieve day-ahead electricity prices for Denmark's DK1 and DK2 price areas. The goal is to build an automated pipeline that stores and transforms the data for further analysis.
+## 🗺️ Architecture
 
-## Tech Stack
+![Project architecture — implemented and planned stages](PROJECT_ARCHITECTURE.png)
 
-**Currently used:** Python, Pandas, Requests, Boto3, AWS S3, JSON, Parquet, Git, GitHub
+The diagram distinguishes the **implemented ingestion and storage pipeline** from the **planned analytics and web app**. EventBridge and CloudWatch are supporting services whose configuration still needs verification.
 
-**Planned:** AWS Lambda, EventBridge Scheduler, CloudWatch, Databricks, PySpark, Delta Lake, SQL, dbt, DuckDB, Streamlit
+## 🛠️ Technologies
 
-## Pipeline Overview
+**Implemented:** Python, Pandas, Requests, Boto3, Amazon S3, AWS Lambda, JSON, Parquet, Git and GitHub.
 
-### 1. Data Extraction & Validation
+**Planned:** Databricks, PySpark, Delta Lake, SQL and Streamlit.
 
-`api_data_extraction.ipynb`
+**To verify and document:** EventBridge scheduling and CloudWatch monitoring.
 
-Retrieves electricity prices from the Energi Data Service API and saves the raw response as JSON.
+## 🔄 How the Project Works
 
-The following data quality checks are included:
+The idea is to take real electricity prices from Energinet and turn them into reliable, organized data that will eventually power an **interactive web app where anyone can explore electricity prices, compare regions, and discover cheaper hours to use electricity**.
 
-- Missing values and duplicate records
-- Valid price areas (DK1 and DK2)
-- Price data types and timestamp validation
-- Missing 15-minute intervals
+### 1. Collecting real electricity prices
 
-### 2. Data Preparation
+`scripts/api_data_extraction.ipynb` connects to Energinet's `DayAheadPrices` API for DK1 and DK2. It checks missing values, duplicate records, invalid price areas, price types, timestamps and missing 15-minute intervals.
 
-`data_preparation.ipynb`
+The initial dataset contains **1,344 records for 1–7 November 2026**; the implemented quality checks passed.
 
-Converts JSON records into a Pandas DataFrame, prepares the timestamp columns, adds a delivery date, and exports the data to Parquet.
+### 2. Preparing the data
 
-### 3. AWS Cloud Storage
+`scripts/data_preparation.ipynb` converts API JSON into a Pandas DataFrame, prepares timestamps and delivery dates, and exports Parquet for efficient downstream use. Original price precision is preserved.
 
-`aws_s3_integration.ipynb`
+### 3. Storing data in Amazon S3
 
-Uses Boto3 to upload raw JSON and processed Parquet files to Amazon S3, with separate storage paths and upload verification.
+`scripts/aws_s3_integration.ipynb` uses Boto3 to upload the original JSON and prepared Parquet files to separate paths:
 
 ```text
 s3://nordic-energy-data-pipeline-yh2026/
-├── raw/dayaheadprices/
-│   └── ingestion_date=YYYY-MM-DD/prices.json
-└── processed/dayaheadprices/
-    └── ingestion_date=YYYY-MM-DD/day_ahead_prices.parquet
+├── raw/dayaheadprices/ingestion_date=YYYY-MM-DD/prices.json
+└── processed/dayaheadprices/ingestion_date=YYYY-MM-DD/day_ahead_prices.parquet
 ```
 
-The initial dataset contains **1,344 records** covering 1–7 November 2026 for DK1 and DK2. All implemented data quality checks passed on this dataset.
+### 4. Automating the daily pipeline
 
-## Project Structure
+`scripts/energy_pipeline.py` calculates tomorrow's delivery date in the Copenhagen timezone, requests DK1/DK2 prices, validates completeness, creates JSON and Parquet output, and optionally uploads to S3. It accounts for daylight saving changes: normally **96** quarter-hour observations per area, or **92/100** on clock-change days. Upload safeguards avoid overwrites and support safe retries.
 
-```text
-Nordic Energy Data Pipeline/
-├── scripts/
-│   ├── api_data_extraction.ipynb
-│   ├── data_preparation.ipynb
-│   ├── aws_s3_integration.ipynb
-│   └── energy_pipeline.py
-├── json_data_file/
-├── data/
-│   └── processed/
-├── requirements.txt
-└── README.md
-```
-
-Raw and processed datasets are generated locally and excluded from Git. The `energy_pipeline.py` script runs the daily job independently of the notebooks.
-
-## Getting Started
-
-Clone the repository and install the dependencies:
-
-```bash
-git clone https://github.com/Yassdata/Nordic-energy-data-pipeline.git
-cd Nordic-energy-data-pipeline
-
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-Open the notebooks in VS Code using the project's Python environment.
-
-Run them in this order:
-
-1. `api_data_extraction.ipynb` — Extract and validate electricity prices.
-2. `data_preparation.ipynb` — Prepare the data and export to Parquet.
-3. `aws_s3_integration.ipynb` — Upload and verify files in S3 (requires configured AWS access).
-
-## Daily ingestion script
-
-The script requests tomorrow's prices using Copenhagen calendar dates. It
-validates a full day for DK1 and DK2 before creating either output. Each area
-must have 96 quarter-hours on a normal day, 92 when clocks move forward, or
-100 when they move back.
-
-Run the tests from the repo root with the project's Python environment active:
-
-```bash
-python -B -m unittest discover -s tests -v
-```
-
-To check tomorrow's live response and write only to a new temporary directory:
-
-```bash
-scratch="$(mktemp -d)"
-python -B scripts/energy_pipeline.py --local-output "$scratch/output"
-```
-
-Run after tomorrow's prices are published. For an offline check, add
-`--input-json /path/to/single-day-response.json --delivery-date YYYY-MM-DD`.
-The input must contain exactly one complete delivery day, including both zones.
-Local mode does not create an AWS client and refuses to reuse an output directory.
-
-An intentional AWS run requires `--upload` and `ENERGY_S3_BUCKET`. Boto3 uses
-its normal credential chain; set `AWS_PROFILE` locally if you want to select a
-configured profile. For Lambda, configure
-`scripts.energy_pipeline.lambda_handler` when packaging from the repo root,
-include the dependencies for the Lambda runtime and architecture, set
-`ENERGY_S3_BUCKET`, and use the execution role. Do not put AWS keys in source
-or Lambda environment variables.
-
-Daily S3 keys are separate from the notebooks' historical `ingestion_date` keys:
+The automated script uses **delivery-date** prefixes rather than the notebook's ingestion-date prefixes:
 
 ```text
 raw/dayaheadprices/delivery_date=YYYY-MM-DD/prices.json
 processed/dayaheadprices/delivery_date=YYYY-MM-DD/day_ahead_prices.parquet
 ```
 
-The role needs `s3:PutObject` on both prefixes and `s3:GetObject` to check
-existing objects. S3 refuses overwrites. If a run stops after uploading raw JSON,
-a retry with matching content can finish the Parquet upload; a content mismatch
-fails and leaves the existing object in place. The two uploads are separate
-operations.
+### 5. AWS Lambda
 
-## Next Steps
+The Python ingestion pipeline was **deployed to AWS Lambda and successfully tested on 14 November 2026**. Lambda uses an IAM execution role rather than embedded AWS credentials. Daily EventBridge scheduling and CloudWatch monitoring have not yet been verified in this documentation.
 
-- Automate daily extraction and S3 uploads using **AWS Lambda and EventBridge Scheduler**.
-- Build **Bronze, Silver, and Gold** data layers using Databricks, PySpark, and Delta Lake.
-- Use SQL, dbt, and DuckDB for transformations and electricity price analysis.
-- Develop a Streamlit dashboard to compare DK1 and DK2 prices, explore historical trends, and identify lower-price periods.
+## 🧪 Testing and Data Quality
 
-## Data Source
+Run the automated tests:
 
-[Energi Data Service — DayAheadPrices](https://www.energidataservice.dk/)
+```bash
+python -B -m unittest discover -s tests -v
+```
+
+Run locally without uploading to AWS:
+
+```bash
+scratch="$(mktemp -d)"
+python -B scripts/energy_pipeline.py --local-output "$scratch/output"
+```
+
+Test against a saved, complete single-day API response:
+
+```bash
+python -B scripts/energy_pipeline.py \
+  --input-json /path/to/single-day-response.json \
+  --delivery-date YYYY-MM-DD \
+  --local-output "$scratch/output"
+```
+
+## 📁 Project Structure
+
+```text
+├── scripts/
+│   ├── api_data_extraction.ipynb
+│   ├── data_preparation.ipynb
+│   ├── aws_s3_integration.ipynb
+│   └── energy_pipeline.py
+├── tests/
+├── json_data_file/
+├── data/processed/
+├── docs/AWS_SETUP.md
+├── PROJECT_ARCHITECTURE.png
+├── requirements.txt
+└── README.md
+```
+
+## 🚀 Getting Started
+
+```bash
+git clone https://github.com/Yassdata/Nordic-energy-data-pipeline.git
+cd Nordic-energy-data-pipeline
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+AWS uploads require `--upload`, `ENERGY_S3_BUCKET`, and valid AWS authentication. Local development can use `AWS_PROFILE`; Lambda uses its execution role. See [AWS Setup](docs/AWS_SETUP.md).
+
+## 📊 What's Next?
+
+- Verify and document scheduling and monitoring.
+- Connect S3 data to Databricks and build Bronze, Silver and Gold Delta Lake tables with PySpark.
+- Use SQL to compare DK1/DK2 prices, identify trends and cheaper periods.
+- Build a Streamlit app for interactive exploration and potential spot-price savings estimates, with appropriate caveats about tariffs and electricity contracts.
+
+## 🌍 Future Possibilities
+
+Expand beyond Denmark to compare electricity prices across other Nordic countries.
+
+## 📚 Data Source
+
+[Energinet — Energi Data Service](https://www.energidataservice.dk/), `DayAheadPrices` for DK1 and DK2.
