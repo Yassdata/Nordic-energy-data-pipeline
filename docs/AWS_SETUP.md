@@ -19,7 +19,7 @@ aws login --profile nordic-energy
 aws sts get-caller-identity --profile nordic-energy
 ```
 
-The second command verified the authenticated AWS identity. Local AWS configuration is stored outside the repository, typically under `~/.aws/config`.
+The second command verified the authenticated AWS identity. The `nordic-energy` profile was also verified to have access to the project's S3 bucket in `eu-north-1`. Local AWS configuration is stored outside the repository, typically under `~/.aws/config`.
 
 ## 3. Amazon S3 Bucket
 
@@ -90,14 +90,16 @@ Security choices include blocked public S3 access, disabled ACLs, SSE-S3 encrypt
 
 ## 8. Scheduling and Monitoring
 
-**Confirmed:** Lambda was deployed and manually tested successfully.
+**Confirmed:** Lambda was deployed and manually tested successfully on 14 November 2026.
 
-**Still to verify and document:** Whether EventBridge Scheduler is configured for daily invocation; its schedule, timezone and trigger; CloudWatch log output; and any failure alerting. These are not claimed as completed.
+**EventBridge Scheduler:** An IAM execution role exists and shows recent activity. The daily schedule, timezone, Lambda target, and successful scheduled invocation still need to be verified.
+
+**CloudWatch:** Lambda execution logs and failure alerting still need to be verified.
 
 ## 9. Architecture and Next Steps
 
 ![Project architecture](../PROJECT_ARCHITECTURE.png)
 
-The deployed AWS layer handles **Energinet API → Python on Lambda → S3**. Work is now in progress on the **Databricks/PySpark/Delta Lake medallion structure (Bronze → Silver → Gold)**. The next stages are **SQL analytics** and presenting results through **Streamlit**.
+The deployed AWS layer handles **Energinet API → Python on Lambda → S3**. Work is now in progress on the **Databricks/PySpark/Delta Lake medallion structure (Bronze → Silver → Gold)**. Direct access to the private S3 bucket is pending: no active Unity Catalog external location or successful Databricks read has been verified. Establishing and verifying this access is the immediate next step. The later stages are **reusable SQL analytics and recurring, ongoing reports**, with results presented through **Streamlit**.
 
 Return to the [main README](../README.md).

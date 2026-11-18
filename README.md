@@ -4,7 +4,7 @@ An end-to-end data engineering project built to support **recurring, ongoing rep
 
 The goal is to keep reports up to date as new prices arrive: compare regions, track price patterns over time, and identify cheaper periods through reusable SQL analysis and an interactive Streamlit app. Historical storage, repeatable transformations, and consistent quality checks provide the foundation for reliable reporting across successive days, weeks, and months.
 
-**Current stage:** Building the **Bronze → Silver → Gold** structure in Databricks using PySpark and Delta Lake.
+**Current stage:** Working toward the **Bronze → Silver → Gold** structure in Databricks using PySpark and Delta Lake. Direct access to the private S3 bucket is pending; no active Unity Catalog external location or successful Databricks read has been verified.
 
 ## 📍 Project Status
 
@@ -15,10 +15,12 @@ The goal is to keep reports up to date as new prices arrive: compare regions, tr
 | Upload raw and processed data to Amazon S3 | Completed |
 | Build the daily ingestion script | Completed |
 | Deploy and manually test AWS Lambda | Completed — tested on 14 November 2026 |
-| Build the Databricks medallion structure | In progress |
+| Connect Databricks to private S3 data | Pending — external location and successful read not verified |
+| Build the Databricks medallion structure | In progress — S3 access pending |
 | Develop reusable SQL analytics and recurring reports | Planned |
 | Build the Streamlit app | Planned |
-| Document EventBridge scheduling and CloudWatch monitoring | Configuration still to verify |
+| Verify EventBridge scheduling | IAM execution role exists with recent activity; schedule and invocation unverified |
+| Verify CloudWatch monitoring | Execution logs and failure alerting unverified |
 
 ## 🗺️ Architecture
 
@@ -39,7 +41,7 @@ Streamlit app                            ← Planned
 
 ![Project architecture](PROJECT_ARCHITECTURE.png)
 
-The architecture image shows the overall project design. The status table above reflects current progress: ingestion and S3 storage are implemented, and the Databricks layer is under construction. EventBridge scheduling and CloudWatch monitoring still need configuration verification and documentation.
+The architecture image shows the overall project design. Ingestion, S3 storage, and a manual Lambda test are confirmed. Scheduled invocation and CloudWatch monitoring still require verification. Work on the Databricks layer is in progress, with direct S3 access pending.
 
 ## 🛠️ Technology Stack
 
@@ -51,7 +53,7 @@ The architecture image shows the overall project design. The status table above 
 | Lakehouse processing | Databricks, PySpark, Delta Lake | In progress |
 | Analytics and recurring reporting | SQL | Planned |
 | Visualization | Streamlit | Planned |
-| Scheduling and monitoring | EventBridge, CloudWatch | To verify and document |
+| Scheduling and monitoring | EventBridge, CloudWatch | Scheduler role exists; scheduling, logs, and alerting require verification |
 | Version control | Git, GitHub | In use |
 
 ## 🔄 Data Pipeline
@@ -88,9 +90,16 @@ The earlier notebook uploads use `ingestion_date=YYYY-MM-DD` partitions instead 
 
 The pipeline was deployed to **AWS Lambda and manually tested successfully on 14 November 2026**. Lambda authenticates through an IAM execution role. See [AWS setup and deployment notes](docs/AWS_SETUP.md) for the documented configuration.
 
+### AWS deployment, scheduling, and monitoring
+
+- **Confirmed:** The ingestion pipeline was deployed to AWS Lambda and manually tested successfully on 14 November 2026. The `nordic-energy` AWS CLI profile was also verified to have access to the project's S3 bucket in `eu-north-1`.
+- **EventBridge Scheduler:** An IAM execution role exists and shows recent activity. The daily schedule, timezone, Lambda target, and successful scheduled invocation still need to be verified.
+- **CloudWatch:** Lambda execution logs and failure alerting still need to be verified.
+- **Databricks:** Direct access to the private S3 bucket is pending. No active Unity Catalog external location or successful Databricks read has been verified.
+
 ### 4. Build the Databricks medallion structure — in progress
 
-The current work organizes S3 data into Delta Lake tables with three layers:
+Once S3 access is established and a Databricks read succeeds, the medallion structure will organize the data into three Delta Lake layers:
 
 | Layer | Intended role |
 |---|---|
@@ -182,12 +191,11 @@ The tests cover Copenhagen delivery dates, daylight saving transitions, missing 
 
 ## 📊 What's Next?
 
-1. **Finish the Databricks medallion structure:** Build and validate Bronze, Silver, and Gold Delta tables with PySpark.
-2. **Add Databricks work to the repository:** Document S3 access, table definitions, transformations, and data quality checks.
-3. **Develop recurring reports:** Create reusable SQL queries for DK1/DK2 comparisons, price trends, and cheaper periods, and implement reporting refreshes as new data arrives.
-4. **Build the Streamlit app:** Present the latest reports and make historical comparisons and price exploration interactive.
-
-A documentation follow-up remains to verify and record EventBridge scheduling and CloudWatch monitoring.
+1. **Establish Databricks access to S3:** Configure and verify private bucket access, including the Unity Catalog external location, and confirm a successful read.
+2. **Build the Databricks medallion structure:** Build and validate Bronze, Silver, and Gold Delta tables with PySpark, and add notebooks and setup documentation to the repository.
+3. **Verify AWS automation and monitoring:** Confirm the daily schedule, timezone, Lambda target, successful scheduled invocation, execution logs, and failure alerting.
+4. **Develop recurring reports:** Create reusable SQL queries for DK1/DK2 comparisons, price trends, and cheaper periods, and implement reporting refreshes as new data arrives.
+5. **Build the Streamlit app:** Present the latest reports and make historical comparisons and price exploration interactive.
 
 ## 🌍 Future Possibilities
 
