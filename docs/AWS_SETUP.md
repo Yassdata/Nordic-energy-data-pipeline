@@ -98,6 +98,6 @@ Security choices include blocked public S3 access, disabled ACLs, SSE-S3 encrypt
 
 ![Project architecture](../PROJECT_ARCHITECTURE.png)
 
-The deployed AWS layer handles **Energinet API → Python on Lambda → S3**. Planned work will read the stored data into **Databricks/PySpark/Delta Lake (Bronze → Silver → Gold)**, run **SQL analytics**, and present results through **Streamlit**.
+The deployed AWS layer handles **Energinet API → Python on Lambda → S3**. Work is now in progress on the **Databricks/PySpark/Delta Lake medallion structure (Bronze → Silver → Gold)**. The next stages are **SQL analytics** and presenting results through **Streamlit**.
 
 Return to the [main README](../README.md).

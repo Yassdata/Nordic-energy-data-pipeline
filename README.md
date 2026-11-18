@@ -1,119 +1,193 @@
-# ⚡ End-to-End Danish Electricity Price Analytics | Real Energinet Data 🇩🇰
+# ⚡ Danish Electricity Price Analytics 🇩🇰
 
-Ever wondered why electricity prices change throughout the day, or why they can be different across Denmark? In this project, I'm exploring **real day-ahead electricity prices from [Energinet's Energi Data Service API](https://www.energidataservice.dk/)**, covering Denmark's two electricity price areas, **DK1 (Western Denmark) and DK2 (Eastern Denmark)**. Using Python, AWS, and data engineering tools, I'm building an automated system that collects, validates, and prepares this data for analysis. The goal is to uncover price patterns, compare electricity prices across regions, and identify the cheapest hours to use electricity, turning real market data into practical insights that anyone can understand.
+An end-to-end data engineering project built to support **recurring, ongoing reports on Danish electricity prices** using real day-ahead data from Energinet. The pipeline collects and validates prices for **DK1 (Western Denmark)** and **DK2 (Eastern Denmark)**, stores them in Amazon S3, and is being extended with a **Databricks medallion architecture** for reporting and analytics.
+
+The goal is to keep reports up to date as new prices arrive: compare regions, track price patterns over time, and identify cheaper periods through reusable SQL analysis and an interactive Streamlit app. Historical storage, repeatable transformations, and consistent quality checks provide the foundation for reliable reporting across successive days, weeks, and months.
+
+**Current stage:** Building the **Bronze → Silver → Gold** structure in Databricks using PySpark and Delta Lake.
+
+## 📍 Project Status
+
+| Stage | Status |
+|---|---|
+| Explore the Energinet API and validate initial data | Completed |
+| Prepare JSON and Parquet datasets | Completed |
+| Upload raw and processed data to Amazon S3 | Completed |
+| Build the daily ingestion script | Completed |
+| Deploy and manually test AWS Lambda | Completed — tested on 14 November 2026 |
+| Build the Databricks medallion structure | In progress |
+| Develop reusable SQL analytics and recurring reports | Planned |
+| Build the Streamlit app | Planned |
+| Document EventBridge scheduling and CloudWatch monitoring | Configuration still to verify |
 
 ## 🗺️ Architecture
 
-![Project architecture — implemented and planned stages](PROJECT_ARCHITECTURE.png)
+```text
+Energinet API
+    ↓
+Python ingestion on AWS Lambda
+    ↓
+Amazon S3 — raw JSON + prepared Parquet
+    ↓
+Databricks / PySpark / Delta Lake          ← Current work
+    Bronze → Silver → Gold
+    ↓
+SQL analytics and recurring reports      ← Planned
+    ↓
+Streamlit app                            ← Planned
+```
 
-The diagram distinguishes the **implemented ingestion and storage pipeline** from the **planned analytics and web app**. EventBridge and CloudWatch are supporting services whose configuration still needs verification.
+![Project architecture](PROJECT_ARCHITECTURE.png)
 
-## 🛠️ Technologies
+The architecture image shows the overall project design. The status table above reflects current progress: ingestion and S3 storage are implemented, and the Databricks layer is under construction. EventBridge scheduling and CloudWatch monitoring still need configuration verification and documentation.
 
-**Implemented:** Python, Pandas, Requests, Boto3, Amazon S3, AWS Lambda, JSON, Parquet, Git and GitHub.
+## 🛠️ Technology Stack
 
-**Planned:** Databricks, PySpark, Delta Lake, SQL and Streamlit.
+| Area | Technologies | Status |
+|---|---|---|
+| Extraction and preparation | Python, Requests, Pandas, PyArrow | Implemented |
+| Storage and cloud execution | Amazon S3, AWS Lambda, Boto3 | Implemented |
+| Data formats | JSON, Parquet | Implemented |
+| Lakehouse processing | Databricks, PySpark, Delta Lake | In progress |
+| Analytics and recurring reporting | SQL | Planned |
+| Visualization | Streamlit | Planned |
+| Scheduling and monitoring | EventBridge, CloudWatch | To verify and document |
+| Version control | Git, GitHub | In use |
 
-**To verify and document:** EventBridge scheduling and CloudWatch monitoring.
+## 🔄 Data Pipeline
 
-## 🔄 How the Project Works
+### 1. Extract and validate prices
 
-The idea is to take real electricity prices from Energinet and turn them into reliable, organized data that will eventually power an **interactive web app where anyone can explore electricity prices, compare regions, and discover cheaper hours to use electricity**.
+The initial exploration in [`scripts/api_data_extraction.ipynb`](scripts/api_data_extraction.ipynb) uses Energinet's `DayAheadPrices` dataset for DK1 and DK2. It checks missing values, duplicates, price areas, price types, timestamps, and missing 15-minute intervals.
 
-### 1. Collecting real electricity prices
+The initial dataset contains **1,344 records covering 1–7 November 2026**, with the implemented quality checks passing.
 
-`scripts/api_data_extraction.ipynb` connects to Energinet's `DayAheadPrices` API for DK1 and DK2. It checks missing values, duplicate records, invalid price areas, price types, timestamps and missing 15-minute intervals.
+### 2. Prepare and store data
 
-The initial dataset contains **1,344 records for 1–7 November 2026**; the implemented quality checks passed.
+[`scripts/data_preparation.ipynb`](scripts/data_preparation.ipynb) prepares timestamps and delivery dates and exports Parquet while preserving the original price precision. [`scripts/aws_s3_integration.ipynb`](scripts/aws_s3_integration.ipynb) uploads the original JSON and prepared Parquet to S3.
 
-### 2. Preparing the data
-
-`scripts/data_preparation.ipynb` converts API JSON into a Pandas DataFrame, prepares timestamps and delivery dates, and exports Parquet for efficient downstream use. Original price precision is preserved.
-
-### 3. Storing data in Amazon S3
-
-`scripts/aws_s3_integration.ipynb` uses Boto3 to upload the original JSON and prepared Parquet files to separate paths:
+The daily pipeline uses this layout:
 
 ```text
 s3://nordic-energy-data-pipeline-yh2026/
-├── raw/dayaheadprices/ingestion_date=YYYY-MM-DD/prices.json
-└── processed/dayaheadprices/ingestion_date=YYYY-MM-DD/day_ahead_prices.parquet
+├── raw/dayaheadprices/delivery_date=YYYY-MM-DD/prices.json
+└── processed/dayaheadprices/delivery_date=YYYY-MM-DD/day_ahead_prices.parquet
 ```
 
-### 4. Automating the daily pipeline
+The earlier notebook uploads use `ingestion_date=YYYY-MM-DD` partitions instead of `delivery_date=YYYY-MM-DD`. These existing S3 paths are ingestion outputs; the Databricks medallion layers are the current development stage.
 
-`scripts/energy_pipeline.py` calculates tomorrow's delivery date in the Copenhagen timezone, requests DK1/DK2 prices, validates completeness, creates JSON and Parquet output, and optionally uploads to S3. It accounts for daylight saving changes: normally **96** quarter-hour observations per area, or **92/100** on clock-change days. Upload safeguards avoid overwrites and support safe retries.
+### 3. Run ingestion through AWS Lambda
 
-The automated script uses **delivery-date** prefixes rather than the notebook's ingestion-date prefixes:
+[`scripts/energy_pipeline.py`](scripts/energy_pipeline.py) combines extraction, validation, JSON/Parquet output, and optional S3 upload. It:
 
-```text
-raw/dayaheadprices/delivery_date=YYYY-MM-DD/prices.json
-processed/dayaheadprices/delivery_date=YYYY-MM-DD/day_ahead_prices.parquet
-```
+- Calculates tomorrow's delivery date in the `Europe/Copenhagen` timezone.
+- Validates complete DK1/DK2 coverage, with **96 quarter-hour observations per area** on normal days and **92 or 100** on daylight saving transition days.
+- Retries transient API failures and incomplete responses.
+- Preserves the raw API response alongside prepared Parquet.
+- Supports safe retries and rejects conflicting S3 overwrites.
 
-### 5. AWS Lambda
+The pipeline was deployed to **AWS Lambda and manually tested successfully on 14 November 2026**. Lambda authenticates through an IAM execution role. See [AWS setup and deployment notes](docs/AWS_SETUP.md) for the documented configuration.
 
-The Python ingestion pipeline was **deployed to AWS Lambda and successfully tested on 14 November 2026**. Lambda uses an IAM execution role rather than embedded AWS credentials. Daily EventBridge scheduling and CloudWatch monitoring have not yet been verified in this documentation.
+### 4. Build the Databricks medallion structure — in progress
 
-## 🧪 Testing and Data Quality
+The current work organizes S3 data into Delta Lake tables with three layers:
 
-Run the automated tests:
+| Layer | Intended role |
+|---|---|
+| **Bronze** | Ingest source data from S3 and retain source records for downstream processing. |
+| **Silver** | Apply consistent types, clean and validate records, and handle duplicates for reliable DK1/DK2 price data. |
+| **Gold** | Prepare reusable reporting tables and summaries for recurring regional comparisons, price trends, and cheaper-period analysis. |
+
+Databricks notebooks and table definitions will be added to this repository as the implementation progresses.
+
+### 5. Produce recurring reports and visualize results — planned
+
+Reusable SQL queries will use the Gold layer to produce ongoing reports comparing DK1 and DK2, tracking price trends, and identifying cheaper periods. The intended workflow will refresh reporting tables as new data arrives, so the same reporting logic can run consistently over an expanding history. Report scheduling and refresh orchestration remain to be implemented.
+
+A Streamlit app will provide access to the latest reporting results and interactive historical exploration. Any savings estimates will need to distinguish spot prices from the customer's total electricity cost, including tariffs and contract terms.
+
+## 🚀 Getting Started
+
+The local setup runs the Python ingestion pipeline. Databricks processing is being built separately in the workspace.
 
 ```bash
-python -B -m unittest discover -s tests -v
+git clone https://github.com/Yassdata/Nordic-energy-data-pipeline.git
+cd Nordic-energy-data-pipeline
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
-Run locally without uploading to AWS:
+The pinned dependencies in [`requirements.txt`](requirements.txt) were verified for Python 3.12.
+
+### Run locally
+
+Fetch tomorrow's data and write it locally:
 
 ```bash
 scratch="$(mktemp -d)"
 python -B scripts/energy_pipeline.py --local-output "$scratch/output"
 ```
 
-Test against a saved, complete single-day API response:
+To use a saved, complete single-day API response:
 
 ```bash
+scratch="$(mktemp -d)"
 python -B scripts/energy_pipeline.py \
   --input-json /path/to/single-day-response.json \
   --delivery-date YYYY-MM-DD \
   --local-output "$scratch/output"
 ```
 
-## 📁 Project Structure
+### Upload to S3
+
+With valid AWS authentication configured:
+
+```bash
+export AWS_PROFILE=nordic-energy
+export ENERGY_S3_BUCKET=nordic-energy-data-pipeline-yh2026
+python -B scripts/energy_pipeline.py --upload
+```
+
+Local development can use the named AWS profile; Lambda uses its IAM execution role. See [AWS Setup](docs/AWS_SETUP.md).
+
+## 🧪 Testing and Data Quality
+
+Run the automated ingestion tests:
+
+```bash
+python -B -m unittest discover -s tests -v
+```
+
+The tests cover Copenhagen delivery dates, daylight saving transitions, missing and duplicate intervals, invalid prices and areas, retry behavior, local JSON/Parquet output, Lambda uploads, and S3 overwrite safeguards.
+
+## 📁 Repository Structure
 
 ```text
 ├── scripts/
-│   ├── api_data_extraction.ipynb
-│   ├── data_preparation.ipynb
-│   ├── aws_s3_integration.ipynb
-│   └── energy_pipeline.py
+│   ├── api_data_extraction.ipynb   # Initial API exploration and checks
+│   ├── data_preparation.ipynb     # Timestamp preparation and Parquet export
+│   ├── aws_s3_integration.ipynb   # Initial S3 uploads
+│   └── energy_pipeline.py        # CLI and Lambda ingestion pipeline
 ├── tests/
-├── json_data_file/
-├── data/processed/
-├── docs/AWS_SETUP.md
+│   └── test_energy_pipeline.py
+├── json_data_file/                # Local raw data
+├── data/processed/                # Local prepared data
+├── docs/
+│   └── AWS_SETUP.md
 ├── PROJECT_ARCHITECTURE.png
 ├── requirements.txt
 └── README.md
 ```
 
-## 🚀 Getting Started
-
-```bash
-git clone https://github.com/Yassdata/Nordic-energy-data-pipeline.git
-cd Nordic-energy-data-pipeline
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-AWS uploads require `--upload`, `ENERGY_S3_BUCKET`, and valid AWS authentication. Local development can use `AWS_PROFILE`; Lambda uses its execution role. See [AWS Setup](docs/AWS_SETUP.md).
-
 ## 📊 What's Next?
 
-- Verify and document scheduling and monitoring.
-- Connect S3 data to Databricks and build Bronze, Silver and Gold Delta Lake tables with PySpark.
-- Use SQL to compare DK1/DK2 prices, identify trends and cheaper periods.
-- Build a Streamlit app for interactive exploration and potential spot-price savings estimates, with appropriate caveats about tariffs and electricity contracts.
+1. **Finish the Databricks medallion structure:** Build and validate Bronze, Silver, and Gold Delta tables with PySpark.
+2. **Add Databricks work to the repository:** Document S3 access, table definitions, transformations, and data quality checks.
+3. **Develop recurring reports:** Create reusable SQL queries for DK1/DK2 comparisons, price trends, and cheaper periods, and implement reporting refreshes as new data arrives.
+4. **Build the Streamlit app:** Present the latest reports and make historical comparisons and price exploration interactive.
+
+A documentation follow-up remains to verify and record EventBridge scheduling and CloudWatch monitoring.
 
 ## 🌍 Future Possibilities
 
@@ -121,4 +195,4 @@ Expand beyond Denmark to compare electricity prices across other Nordic countrie
 
 ## 📚 Data Source
 
-[Energinet — Energi Data Service](https://www.energidataservice.dk/), `DayAheadPrices` for DK1 and DK2.
+[Energinet — Energi Data Service](https://www.energidataservice.dk/), using the `DayAheadPrices` dataset for DK1 and DK2.
